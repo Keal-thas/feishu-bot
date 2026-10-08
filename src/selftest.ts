@@ -6,7 +6,7 @@ const q = process.argv[2] ?? "用一句话介绍你自己"
 const agent = await startAgent()
 const t = Date.now()
 try {
-  const a = await agent.ask(q, "", { model: config.defaults.model, search: config.defaults.search })
+  const a = await agent.ask(q, "", { model: process.env.SELFTEST_MODEL ?? config.defaults.model, search: config.defaults.search })
   console.log(`✅ ${config.defaults.model} (${((Date.now() - t) / 1000).toFixed(1)}s)\n${a}`)
 } catch (e) {
   console.error("❌", (e as Error).message)

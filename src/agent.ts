@@ -66,7 +66,7 @@ export async function startAgent() {
     const [providerID, ...rest] = opts.model.split("/")
     const session = await client.session.create({ body: { title: question.slice(0, 40) } })
     const sessionId = session.data?.id
-    if (!sessionId) throw new Error(`创建 session 失败: ${JSON.stringify(session.error)}`)
+    if (!sessionId) throw new Error(JSON.stringify(session.error))
     try {
       const text = context ? `【群聊上下文(仅供参考)】\n${context}\n\n【问题】\n${question}` : question
       const res = await client.session.prompt({
@@ -78,7 +78,7 @@ export async function startAgent() {
           parts: [{ type: "text", text }],
         },
       })
-      if (!res.data) throw new Error(`LLM 调用失败: ${JSON.stringify(res.error)}`)
+      if (!res.data) throw new Error(JSON.stringify(res.error))
       const answer = res.data.parts
         .filter((p) => p.type === "text")
         .map((p) => (p as { text: string }).text)

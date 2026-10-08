@@ -117,7 +117,7 @@ async function handle(data: any) {
     answer = await agent.ask(question, context, s)
   } catch (e) {
     console.error("处理失败:", e)
-    answer = `⚠️ 出错了:${(e as Error).message}`
+    answer = (e as Error).message // 原样输出,不再包一层
   }
   if (cardId) await api.im.message.patch({ path: { message_id: cardId }, data: { content: card(answer) } })
   else await replyText(msg.message_id, answer)
