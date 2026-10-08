@@ -24,6 +24,7 @@ type FileConfig = {
   contextMessages: number
   contextWindowMinutes: number
   contextMaxChars: number
+  maxCardChars?: number
   search: boolean
   allowedOpenIds: string[]
 }
@@ -48,4 +49,5 @@ export const config = {
   models: Object.entries(file.providers).flatMap(([p, e]) => e.models.map((m) => `${p}/${m}`)),
   contextWindowMinutes: file.contextWindowMinutes,
   contextMaxChars: file.contextMaxChars,
+  maxCardChars: file.maxCardChars ?? 6000, // 单条卡片最多放多少字,超过就分多条发,不截断
 }

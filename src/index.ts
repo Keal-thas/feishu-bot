@@ -77,7 +77,23 @@ async function buildContext(chatId: string, skipIds: string[], parentId: string 
 }
 
 const card = (md: string) =>
-  JSON.stringify({ schema: "2.0", body: { elements: [{ tag: "markdown", content: md.slice(0, 8000) }] } })
+  JSON.stringify({ schema: "2.0", body: { elements: [{ tag: "markdown", content: md }] } })
+
+/** 按段落切成不超过 max 字的几块;单段过长再硬切。拼起来和原文完全一致,不丢字 */
+export function splitText(text: string, max: number): string[] {
+  if (text.length <= max) return [text]
+  const out: string[] = []
+  let rest = text
+  while (rest.length > max) {
+    let cut = rest.lastIndexOf("\n\n", max)
+    if (cut < max / 2) cut = rest.lastIndexOf("\n", max)
+    if (cut < max / 2) cut = max
+    out.push(rest.slice(0, cut))
+    rest = rest.slice(cut).replace(/^\n+/, "")
+  }
+  if (rest) out.push(rest)
+  return out
+}
 
 async function replyText(messageId: string, text: string) {
   await api.im.message.reply({
@@ -147,8 +163,12 @@ async function handle(data: any) {
   }
   trace.answer = answer
   if (cardId) rememberReply(cardId, answer)
-  if (cardId) await api.im.message.patch({ path: { message_id: cardId }, data: { content: card(answer) } })
-  else await replyText(msg.message_id, answer)
+  const chunks = splitText(answer, config.maxCardChars)
+  if (cardId) await api.im.message.patch({ path: { message_id: cardId }, data: { content: card(chunks[0]) } })
+  else await replyText(msg.message_id, chunks[0])
+  for (const c of chunks.slice(1)) {
+    await api.im.message.reply({ path: { message_id: msg.message_id }, data: { msg_type: "interactive", content: card(c) } })
+  }
   timings.total_ms = Date.now() - t0
   writeTrace({ ...trace, kind: "question", timings })
 }
