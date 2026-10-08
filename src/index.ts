@@ -104,10 +104,11 @@ async function handle(data: any) {
   // 开了 group_msg 权限后群里每条消息都会推过来,这里只处理 @ 我的
   if (!(msg.mentions ?? []).some((m: any) => m.id?.open_id === botOpenId)) return
 
-  const question = textOf(msg.message_type, msg.content, (msg.mentions ?? []).map((m: any) => ({ ...m, name: m.id?.open_id === botOpenId ? "" : m.name })))
+  let question = textOf(msg.message_type, msg.content, (msg.mentions ?? []).map((m: any) => ({ ...m, name: m.id?.open_id === botOpenId ? "" : m.name })))
     .replace(/@某人/g, "")
     .trim()
-  if (!question) return
+  // 只 @ 了机器人、没写别的:让它回应上面群聊里最近的话题
+  if (!question) question = "(只 @ 了你,没有附加文字。请直接回应群聊上下文里最近的问题或话题。)"
 
   const cmd = runCommand(msg.chat_id, question)
   if (cmd !== null) return void (await replyText(msg.message_id, cmd))
