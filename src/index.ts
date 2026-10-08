@@ -51,14 +51,15 @@ async function buildContext(chatId: string, skipIds: string[], parentId: string 
       const since = Date.now() - config.contextWindowMinutes * 60_000
       const labels = new Map<string, string>()
       const items = (res.data?.items ?? [])
-        .filter((m) => !skipIds.includes(m.message_id!) && !m.deleted && m.body?.content && Number(m.create_time) >= since)
+        .filter((m) => !skipIds.includes(m.message_id!) && m.msg_type !== "system" && !m.deleted && m.body?.content && Number(m.create_time) >= since)
         .slice(0, n)
         .reverse()
       for (const m of items) {
+        const isApp = m.sender?.sender_type === "app"
+        const isSelf = isApp && m.sender?.id === config.appId // llm-bot 自己的回复是卡片,内容只能从本地记录取
         const sid = m.sender?.id ?? "?"
-        const isBot = m.sender?.sender_type === "app"
-        const who = isBot ? "机器人" : labels.get(sid) ?? (labels.set(sid, `成员${labels.size + 1}`), labels.get(sid)!)
-        const text = isBot ? getReply(m.message_id!) : textOf(m.msg_type ?? "text", m.body!.content, m.mentions as any[])
+        const who = isSelf ? "机器人" : isApp ? "其他机器人" : labels.get(sid) ?? (labels.set(sid, `成员${labels.size + 1}`), labels.get(sid)!)
+        const text = isSelf ? getReply(m.message_id!) : textOf(m.msg_type ?? "text", m.body!.content, m.mentions as any[])
         if (text) lines.push(`${who}: ${text}`) // 读不到内容的机器人消息(如重启前的卡片)直接跳过
       }
     } catch (e) {
@@ -88,12 +89,8 @@ async function replyText(messageId: string, text: string) {
 async function handle(data: any) {
   const msg = data.message
   if (!msg || isDup(msg.message_id)) return
-  if (data.sender?.sender_type !== "user") {
-    // 忽略机器人消息,避免死循环;记一笔发送者信息,方便确认谁在发(以后要放行测试机器人就靠它)
-    writeTrace({ kind: "ignored", reason: "non-user sender", chat: msg.chat_id, sender_raw: data.sender, mentions: msg.mentions, text: textOf(msg.message_type, msg.content) })
-    console.log(`[ignored] non-user sender ${JSON.stringify(data.sender)}`)
-    return
-  }
+  // 不限制发送者(用户或其他机器人都响应),只忽略自己发的消息,避免自己回复自己
+  if (data.sender?.sender_id?.open_id === botOpenId) return
   const senderId: string | undefined = data.sender?.sender_id?.open_id
   if (config.allowedOpenIds.length && !(senderId && config.allowedOpenIds.includes(senderId))) return
 

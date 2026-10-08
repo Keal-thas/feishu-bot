@@ -11,7 +11,8 @@
     "restart": "docker compose restart",
     "dev": "tsx src/index.ts",
     "selftest": "docker compose exec bot npx tsx src/selftest.ts",
-    "trace": "tsx src/trace-cli.ts"
+    "trace": "tsx src/trace-cli.ts",
+    "dev:bot": "tsx src/dev.ts"
   },
   "dependencies": {
     "@larksuiteoapi/node-sdk": "1.74.0",

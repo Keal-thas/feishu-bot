@@ -106,10 +106,22 @@
 - 排查 LLM 报错:`docker compose exec bot sh -c 'tail -50 /home/node/.local/share/opencode/log/opencode.log'`;模型列表:`docker compose exec bot opencode models deepseek`
 
 ## 如何测试(给 Claude)
-- **直接在真实飞书里测**(用户已授权):Chrome 打开网页版 `https://www.feishu.cn/messenger/`,进「llm-bot 测试」群(chat_id 见日志 `[ctx]`),以用户身份发消息;`@` 机器人要输入 `@llm` 后回车选中,不能手打文字
-- 发完用 `docker compose logs --since 2m | grep -A14 "\[ctx\]"` 看 bot 实际带的上下文
-- 不经飞书直接测 LLM:`npm run selftest -- "问题"`
-- 只在「llm-bot 测试」群里测,不要动用户的其他群/会话;网页版没有「加入群聊」入口,邀请链接(applink)只能唤起桌面客户端
+**首选:用 claude-dev 命令行**(以机器人身份,不用点网页,不动用户的任何会话)
+- `npm run dev:bot -- new` 新建一个干净的测试群(会解散 claude-dev 自己建的旧测试群),上下文从零开始
+- `npm run dev:bot -- say "文字"` 不 @ 的普通发言,模拟群里别人聊天(只会成为上下文)
+- `npm run dev:bot -- send "文字"` @llm-bot 提问,等处理完,**直接打印完整运行记录**(实际带的上下文、工具调用、token、耗时、原始错误、答案)
+- `npm run dev:bot -- send ""` 测试「只 @ 不带文字」
+- `npm run dev:bot -- read 10` 读测试群最近消息(llm-bot 的卡片回复用本地 `data/replies.json` 补全)
+- `npm run dev:bot -- api GET /im/v1/...` 原样调用飞书 API
+- 测试群是 claude-dev 建的,群里只有 claude-dev 和 llm-bot(用户不在里面);用户想围观可手动加进去
+- 已验证(2026-10-08):飞书**会**把「机器人 @ 机器人」的消息推给 llm-bot(靠 `im:message.group_at_msg.include_bot:readonly` 权限);llm-bot 不限制发送者,只忽略自己发的消息
+- 限制:发送者是机器人而不是用户,所以测不到「用户身份」才有的差异;卡片的真实显示效果仍需网页版看一眼
+
+**备选:网页版飞书**(以用户身份,需用户授权,只在「llm-bot 测试」群里测)
+- Chrome 打开 `https://www.feishu.cn/messenger/`;`@` 机器人要输入 `@llm` 后回车选中,不能手打文字
+- 网页版没有「加入群聊」入口,邀请链接(applink)只能唤起桌面客户端
+
+**不经飞书直接测 LLM**:`npm run selftest -- "问题"`;看日志:`docker compose logs --since 2m | grep -A14 "\[ctx\]"`
 
 ## 运行记录(给开发 agent 用)
 - 每次请求写一行到 `data/traces.jsonl`(不进 git):原话、发送者、设置、**实际带的上下文**、工具调用(搜索词/抓取的网页/耗时/返回)、token 与费用、各阶段耗时、**原始错误**、最终答案
@@ -121,5 +133,5 @@
   - 控制台:https://open.feishu.cn/app/cli_aa4d1aec7fb81cc9
 - 密钥 `DEV_APP_SECRET` 放 `.env`(用户自己粘贴,不提交)
 - 目的:让 Claude Code 以「机器人身份」往测试群 @ llm-bot 发消息、读群消息,配合 `npm run trace` 看 llm-bot 实际带的上下文和工具调用
-- 限制:飞书 API 不能冒充用户发消息,发送者是机器人;llm-bot 默认忽略机器人消息,放行要靠信任名单(待实测确认飞书是否会把「机器人 @ 机器人」推给 llm-bot;被忽略的机器人消息会记到 trace 的 `kind: ignored`,日志里有 `[ignored]`)
+- 限制:飞书 API 不能冒充用户发消息,发送者是机器人。llm-bot 对发送者**不设限**(用户或其他机器人 @ 都响应),只忽略自己发的消息;用户明确说不需要信任名单、也不担心 key 用量
 - 注意:open_id 是按应用隔离的,同一个人在 llm-bot 和 claude-dev 下的 open_id 不同;跨应用要用 union_id(llm-bot 的 trace 里 `sender_ids` 有)
