@@ -121,6 +121,8 @@
 - Chrome 打开 `https://www.feishu.cn/messenger/`;`@` 机器人要输入 `@llm` 后回车选中,不能手打文字
 - 网页版没有「加入群聊」入口,邀请链接(applink)只能唤起桌面客户端
 
+**测试群的规矩(用户已明确说明)**:在测试群(「llm-bot dev」和「llm-bot 测试」)里随便发消息、不用撤回、不用清理都没关系;**唯一的红线是不能把别人拉进群**(只有用户本人、llm-bot、claude-dev)
+
 **不经飞书直接测 LLM**:`npm run selftest -- "问题"`;看日志:`docker compose logs --since 2m | grep -A14 "\[ctx\]"`
 
 ## 运行记录(给开发 agent 用)
