@@ -27,6 +27,8 @@
   "contextMessages": 10,
   "contextWindowMinutes": 30,
   "contextMaxChars": 3000,
+  "threadMaxMessages": 50,
+  "threadMaxChars": 12000,
   "maxCardChars": 6000,
   "search": true,
   "allowedOpenIds": [],

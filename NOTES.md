@@ -107,15 +107,18 @@
 
 ## 如何测试(给 Claude)
 **首选:用 claude-dev 命令行**(以机器人身份,不用点网页,不动用户的任何会话)
-- `npm run dev:bot -- new` 新建一个干净的测试群(会解散 claude-dev 自己建的旧测试群),上下文从零开始
-- `npm run dev:bot -- say "文字"` 不 @ 的普通发言,模拟群里别人聊天(只会成为上下文)
-- `npm run dev:bot -- send "文字"` @llm-bot 提问,等处理完,**直接打印完整运行记录**(实际带的上下文、工具调用、token、耗时、原始错误、答案)
-- `npm run dev:bot -- send ""` 测试「只 @ 不带文字」
-- `npm run dev:bot -- read 10` 读测试群最近消息(llm-bot 的卡片回复用本地 `data/replies.json` 补全)
-- `npm run dev:bot -- api GET /im/v1/...` 原样调用飞书 API
-- 测试群是 claude-dev 建的,群里只有 claude-dev 和 llm-bot(用户不在里面);用户想围观可手动加进去
-- 已验证(2026-10-08):飞书**会**把「机器人 @ 机器人」的消息推给 llm-bot(靠 `im:message.group_at_msg.include_bot:readonly` 权限);llm-bot 不限制发送者,只忽略自己发的消息
-- 限制:发送者是机器人而不是用户,所以测不到「用户身份」才有的差异;卡片的真实显示效果仍需网页版看一眼
+- 现在用**一个固定的测试群 + 话题**,不再每次解散重建群(解散后历史就看不到了):
+  - `npm run dev:bot -- new "标题"` 开一个新话题(群里发一条根消息);之后的 say/send/read 都在这个话题里
+  - `npm run dev:bot -- topic` 不带标题 = 回到群主消息流(不在话题里)
+  - `npm run dev:bot -- say "文字"` 不 @ 的普通发言,模拟群里别人聊天(只会成为上下文)
+  - `npm run dev:bot -- send "文字"` @llm-bot 提问,等处理完,**直接打印完整运行记录**(实际带的上下文、工具调用、token、耗时、原始错误、答案)
+  - `npm run dev:bot -- send ""` 测试「只 @ 不带文字」
+  - `npm run dev:bot -- read 10` 读当前话题(或群)最近消息(llm-bot 的卡片回复用本地 `data/replies.json` 补全)
+  - `npm run dev:bot -- new-group` 才是旧的「解散旧群 + 新建群」,很少需要;`invite` 把用户拉进当前测试群
+  - `npm run dev:bot -- api GET /im/v1/...` 原样调用飞书 API
+- 测试群是 claude-dev 建的,群里有 claude-dev、llm-bot 和用户本人
+- 已验证(2026-10-08):飞书**会**把「机器人 @ 机器人」的消息推给 llm-bot(靠 `im:message.group_at_msg.include_bot:readonly`);llm-bot 不限制发送者,只忽略自己发的消息
+- 限制:发送者是机器人而不是用户,测不到「用户身份」才有的差异;卡片的真实显示效果仍需网页版看一眼
 
 **备选:网页版飞书**(以用户身份,需用户授权,只在「llm-bot 测试」群里测)
 - Chrome 打开 `https://www.feishu.cn/messenger/`;`@` 机器人要输入 `@llm` 后回车选中,不能手打文字
@@ -194,3 +197,10 @@
 - 原因:新容器缓存为空,opencode 服务器先用内置旧快照启动,约 1 分钟后才后台下载新模型目录,且**不会重新加载**;`opencode models` 预热命令在下载完成前就退出了,没用
 - 修复:`scripts/warm-catalog.mjs` 在 bot 启动前**同步**下载 `models.dev/api.json` 到缓存;Dockerfile 的 CMD 先跑它。同时启动时模型校验改用完整目录并等待重试
 - 排查 `Unexpected server error`:`docker compose exec bot sh -c 'grep err_xxxx /home/node/.local/share/opencode/log/opencode.log'`
+
+## 话题(thread)上下文(2026-10-08)
+- 用户的想法:**想专心对话的人自然会去开话题,话题就是完整的对话内容**
+- 行为:消息事件带 `thread_id` 时(即 @ 发生在话题里)→ 上下文 = **整个话题的全部消息(含根消息)**,不套用「最近 10 条 / 30 分钟」;上限 `bot.config.json` 的 `threadMaxMessages`(50 条)、`threadMaxChars`(12000 字),只取最新的;回复(占位卡片、命令回复、分条续篇)都 `reply_in_thread: true`,留在话题里。**不在话题里**:行为和以前完全一样(群里最近 N 条 + 时间窗,回复在主消息流)
+- 不强制把回复折叠进话题(用户没要求,默认保持主消息流)
+- 飞书接口:`im.message.reply` 加 `reply_in_thread: true` 对根消息回复即创建话题(返回 `thread_id: omt_…`);`im.message.list` 用 `container_id_type=thread` 按话题拉,返回根消息 + 所有回复
+- 实测:话题里 @ 时上下文只含该话题的内容,主群里无关消息不混入;追问能看到 bot 自己上一条回答;话题超过 10 条后最早的关键信息仍在(预算 388 被正确答出);trace 里有 `context_mode`(thread/recent)与 `thread_id`

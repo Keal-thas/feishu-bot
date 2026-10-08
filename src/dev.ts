@@ -60,6 +60,20 @@ async function ensureChat(): Promise<{ chatId: string; llmBotId: string }> {
   return { chatId, llmBotId }
 }
 
+/** 发一条消息。state.rootId 存在 → 作为话题回复发进该话题;否则发到群里主消息流。返回 message_id */
+async function post(text: string, mention?: { id: string }) {
+  const { chatId } = await ensureChat()
+  const body = mention ? `<at user_id="${mention.id}">llm-bot</at> ${text}` : text
+  const content = JSON.stringify({ text: body })
+  const { rootId } = state()
+  const r = rootId
+    ? await api("POST", `/im/v1/messages/${rootId}/reply`, { msg_type: "text", content, reply_in_thread: true })
+    : await api("POST", "/im/v1/messages?receive_id_type=chat_id", { receive_id: chatId, msg_type: "text", content })
+  if (r.code !== 0) throw new Error(`发送失败: ${JSON.stringify(r)}`)
+  if (rootId && r.data?.thread_id) save({ threadId: r.data.thread_id })
+  return r.data.message_id as string
+}
+
 const readTraces = (): any[] => {
   try { return readFileSync("data/traces.jsonl", "utf8").trim().split("\n").filter(Boolean).map((l) => JSON.parse(l)) } catch { return [] }
 }
@@ -76,16 +90,11 @@ switch (cmd) {
     out(`测试群 chat_id=${c.chatId}\nllm-bot(claude-dev 视角)=${c.llmBotId}`)
     break
   }
-  case "send": { // npm run dev:bot -- send "问题" [--raw]  以 claude-dev 身份 @llm-bot,等 llm-bot 处理完,打印完整运行记录
+  case "send": { // npm run dev:bot -- send "问题"  以 claude-dev 身份 @llm-bot(有当前话题就发进话题),等 llm-bot 处理完,打印完整运行记录
     const text = args.filter((a) => !a.startsWith("--")).join(" ")
-    if (!text) throw new Error("用法: send <文字>   (文字为空会测试「只 @ 不带文字」)")
-    const { chatId, llmBotId } = await ensureChat()
-    const r = await api("POST", "/im/v1/messages?receive_id_type=chat_id", {
-      receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: `<at user_id="${llmBotId}">llm-bot</at> ${text}` }),
-    })
-    if (r.code !== 0) throw new Error(`发送失败: ${JSON.stringify(r)}`)
-    const id = r.data.message_id
-    console.log(`已发送 ${id},等待 llm-bot…`)
+    const { llmBotId } = await ensureChat()
+    const id = await post(text, { id: llmBotId })
+    console.log(`已发送 ${id}${state().rootId ? "(话题内)" : ""},等待 llm-bot…`)
     const t0 = Date.now()
     while (Date.now() - t0 < 120_000) {
       const hit = readTraces().find((t) => t.message_id === id)
@@ -104,31 +113,51 @@ switch (cmd) {
     out(r.code === 0 ? `已把你拉进测试群 ${chatId}` : r)
     break
   }
-  case "new": { // 解散旧的测试群(claude-dev 自己建的),新建一个干净的,保证上下文从零开始
+  case "new-group": { // 解散旧的测试群(claude-dev 自己建的),新建一个干净的,保证上下文从零开始
     const old = state().chatId
     if (old) {
       const r = await api("DELETE", `/im/v1/chats/${old}`)
       console.log(`解散旧群 ${old}: code=${r.code} ${r.msg}`)
     }
-    save({ chatId: undefined, llmBotId: undefined })
+    save({ chatId: undefined, llmBotId: undefined, rootId: undefined, threadId: undefined })
     const c = await ensureChat()
     out(`新测试群 chat_id=${c.chatId}`)
     break
   }
-  case "say": { // 不 @ 任何人的普通发言(模拟群里别人聊天,bot 不会回复,只会被记作上下文)
+  case "new": { // 等同 topic <标题>:开新话题(默认标题带时间),不再解散/新建群
+    const title = args.join(" ") || new Date().toLocaleString("zh-CN")
+    const { chatId } = await ensureChat()
+    save({ rootId: undefined, threadId: undefined })
+    const r = await api("POST", "/im/v1/messages?receive_id_type=chat_id", { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: `【测试话题】${title}` }) })
+    if (r.code !== 0) throw new Error(`发根消息失败: ${JSON.stringify(r)}`)
+    save({ rootId: r.data.message_id })
+    out(`新话题「${title}」root=${r.data.message_id}`)
+    break
+  }
+  case "say": { // 不 @ 任何人的普通发言(有当前话题就发进话题)
     const text = args.join(" ")
     if (!text) throw new Error("用法: say <文字>")
+    out(`已发送 ${await post(text)}`)
+    break
+  }
+  case "topic": { // 开一个新话题:在群里发一条根消息,之后的 say/send 都发进这个话题(上下文 = 整个话题)。不带参数 = 回到群主消息流
+    const title = args.join(" ")
+    if (!title) { save({ rootId: undefined, threadId: undefined }); out("已回到群主消息流(不在话题里)"); break }
     const { chatId } = await ensureChat()
-    const r = await api("POST", "/im/v1/messages?receive_id_type=chat_id", {
-      receive_id: chatId, msg_type: "text", content: JSON.stringify({ text }),
-    })
-    out(r.code === 0 ? `已发送 ${r.data.message_id}` : r)
+    save({ rootId: undefined, threadId: undefined })
+    const r = await api("POST", "/im/v1/messages?receive_id_type=chat_id", { receive_id: chatId, msg_type: "text", content: JSON.stringify({ text: `【测试话题】${title}` }) })
+    if (r.code !== 0) throw new Error(`发根消息失败: ${JSON.stringify(r)}`)
+    save({ rootId: r.data.message_id })
+    out(`新话题 root=${r.data.message_id}\n之后的 say/send 都在这个话题里。`)
     break
   }
   case "read": { // 读群里最近的消息;bot 的卡片回复用 data/replies.json 补全内容
     const { chatId } = await ensureChat()
     const n = Number(args[0] ?? 10)
-    const r = await api("GET", `/im/v1/messages?container_id_type=chat&container_id=${chatId}&sort_type=ByCreateTimeDesc&page_size=${n}`)
+    const { threadId } = state()
+    const r = threadId
+      ? await api("GET", `/im/v1/messages?container_id_type=thread&container_id=${threadId}&sort_type=ByCreateTimeDesc&page_size=${n}`)
+      : await api("GET", `/im/v1/messages?container_id_type=chat&container_id=${chatId}&sort_type=ByCreateTimeDesc&page_size=${n}`)
     let replies: Record<string, string> = {}
     try { replies = JSON.parse(readFileSync("data/replies.json", "utf8")) } catch {}
     for (const m of [...(r.data?.items ?? [])].reverse()) {
@@ -141,9 +170,14 @@ switch (cmd) {
   }
   default:
     out(`claude-dev 开发测试命令行(以机器人身份操作,不是用户):
-  setup                        确认/创建测试群(llm-bot dev)\n  invite                       把用户拉进当前测试群\n  new                          解散旧测试群并新建一个干净的(上下文从零开始)
-  say <文字>                   不 @ 的普通发言(模拟群里别人聊天,只会成为上下文)\n  send <文字>                  @llm-bot 发消息,等处理完,打印完整运行记录(上下文/工具/token/耗时/答案)
-  read [条数]                  读测试群最近的消息(bot 的卡片回复用本地记录补全)
+  setup                        确认/创建测试群(llm-bot dev,固定一个群,不再反复解散)
+  new [标题]                   开一个新话题(群里发根消息);之后 say/send/read 都在这个话题里。话题 = 完整对话上下文
+  topic [标题]                 同 new;不带标题 = 回到群主消息流(不在话题里)
+  say <文字>                   不 @ 的普通发言(模拟别人聊天,只会成为上下文)
+  send <文字>                  @llm-bot 发消息,等处理完,打印完整运行记录(上下文/工具/token/耗时/答案)
+  read [条数]                  读当前话题(或群)最近的消息
+  invite                       把用户拉进当前测试群
+  new-group                    解散旧测试群并新建一个(很少需要)
   api <METHOD> <PATH> [json]   原样调用飞书 API
   info                         claude-dev 自己的机器人信息`)
 }

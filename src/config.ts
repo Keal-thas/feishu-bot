@@ -25,6 +25,8 @@ type FileConfig = {
   contextWindowMinutes: number
   contextMaxChars: number
   maxCardChars?: number
+  threadMaxMessages?: number
+  threadMaxChars?: number
   search: boolean
   allowedOpenIds: string[]
 }
@@ -49,5 +51,8 @@ export const config = {
   models: Object.entries(file.providers).flatMap(([p, e]) => e.models.map((m) => `${p}/${m}`)),
   contextWindowMinutes: file.contextWindowMinutes,
   contextMaxChars: file.contextMaxChars,
+  // 话题里的上下文 = 整个话题的完整对话(不受条数/时间窗限制,只设个上限防止爆 token)
+  threadMaxMessages: file.threadMaxMessages ?? 50,
+  threadMaxChars: file.threadMaxChars ?? 12000,
   maxCardChars: file.maxCardChars ?? 6000, // 单条卡片最多放多少字,超过就分多条发,不截断
 }
