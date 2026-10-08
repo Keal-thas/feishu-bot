@@ -115,3 +115,11 @@
 - 每次请求写一行到 `data/traces.jsonl`(不进 git):原话、发送者、设置、**实际带的上下文**、工具调用(搜索词/抓取的网页/耗时/返回)、token 与费用、各阶段耗时、**原始错误**、最终答案
 - 查看:`npm run trace -- 3`(最近 3 条,人类可读);`npm run trace -- 3 --json` 看原始 JSON
 - 注意:opencode 一次提问会拆成多条 assistant 消息(调工具、再写答案),必须读整个会话才能拿到工具调用,只看 prompt 返回的最后一条会漏
+
+## 开发测试机器人 claude-dev(给 Claude Code 用)
+- 2026-10-08 新建企业自建应用 **claude-dev**,App ID `cli_aa4d1aec7fb81cc9`,已开机器人能力、已开通「消息与群组」类 58 项免审权限、已发布 1.0.0(免审)。**不订阅事件**,只主动发/读消息
+  - 控制台:https://open.feishu.cn/app/cli_aa4d1aec7fb81cc9
+- 密钥 `DEV_APP_SECRET` 放 `.env`(用户自己粘贴,不提交)
+- 目的:让 Claude Code 以「机器人身份」往测试群 @ llm-bot 发消息、读群消息,配合 `npm run trace` 看 llm-bot 实际带的上下文和工具调用
+- 限制:飞书 API 不能冒充用户发消息,发送者是机器人;llm-bot 默认忽略机器人消息,放行要靠信任名单(待实测确认飞书是否会把「机器人 @ 机器人」推给 llm-bot;被忽略的机器人消息会记到 trace 的 `kind: ignored`,日志里有 `[ignored]`)
+- 注意:open_id 是按应用隔离的,同一个人在 llm-bot 和 claude-dev 下的 open_id 不同;跨应用要用 union_id(llm-bot 的 trace 里 `sender_ids` 有)

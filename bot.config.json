@@ -13,5 +13,8 @@
   "contextWindowMinutes": 30,
   "contextMaxChars": 3000,
   "search": true,
-  "allowedOpenIds": []
+  "allowedOpenIds": [],
+  "dev": {
+    "appId": "cli_aa4d1aec7fb81cc9"
+  }
 }

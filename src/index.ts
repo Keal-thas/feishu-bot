@@ -88,7 +88,12 @@ async function replyText(messageId: string, text: string) {
 async function handle(data: any) {
   const msg = data.message
   if (!msg || isDup(msg.message_id)) return
-  if (data.sender?.sender_type !== "user") return // 忽略机器人消息,避免死循环
+  if (data.sender?.sender_type !== "user") {
+    // 忽略机器人消息,避免死循环;记一笔发送者信息,方便确认谁在发(以后要放行测试机器人就靠它)
+    writeTrace({ kind: "ignored", reason: "non-user sender", chat: msg.chat_id, sender_raw: data.sender, mentions: msg.mentions, text: textOf(msg.message_type, msg.content) })
+    console.log(`[ignored] non-user sender ${JSON.stringify(data.sender)}`)
+    return
+  }
   const senderId: string | undefined = data.sender?.sender_id?.open_id
   if (config.allowedOpenIds.length && !(senderId && config.allowedOpenIds.includes(senderId))) return
 
@@ -107,7 +112,7 @@ async function handle(data: any) {
 
   const t0 = Date.now()
   const trace: Record<string, unknown> = {
-    chat: msg.chat_id, sender: senderId, message_id: msg.message_id, question,
+    chat: msg.chat_id, sender: senderId, sender_ids: data.sender?.sender_id, message_id: msg.message_id, question,
   }
 
   const cmd = runCommand(msg.chat_id, question)
