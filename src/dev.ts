@@ -43,8 +43,9 @@ const LLM_BOT_APP_ID = "cli_aa4d2a5ea7f8dcb8"
 async function ensureChat(): Promise<{ chatId: string; llmBotId: string }> {
   let { chatId, llmBotId } = state()
   if (!chatId) {
-    const r = await api("POST", "/im/v1/chats?user_id_type=open_id", {
-      name: "llm-bot dev", description: "Claude Code 自动化测试群", bot_id_list: [LLM_BOT_APP_ID], chat_mode: "group", chat_type: "private",
+    const u = state().userUnionId // 用户的 union_id(跨应用通用),建群时一起拉进来,方便围观
+    const r = await api("POST", "/im/v1/chats?user_id_type=union_id", {
+      name: "llm-bot dev", description: "Claude Code 自动化测试群", bot_id_list: [LLM_BOT_APP_ID], ...(u ? { user_id_list: [u] } : {}), chat_mode: "group", chat_type: "private",
     })
     if (r.code !== 0) throw new Error(`建群失败: ${JSON.stringify(r)}`)
     chatId = r.data.chat_id
@@ -95,6 +96,14 @@ switch (cmd) {
     process.exitCode = 1
     break
   }
+  case "invite": { // 把用户拉进当前测试群
+    const { chatId } = await ensureChat()
+    const u = state().userUnionId
+    if (!u) throw new Error("data/dev.json 里没有 userUnionId")
+    const r = await api("POST", `/im/v1/chats/${chatId}/members?member_id_type=union_id`, { id_list: [u] })
+    out(r.code === 0 ? `已把你拉进测试群 ${chatId}` : r)
+    break
+  }
   case "new": { // 解散旧的测试群(claude-dev 自己建的),新建一个干净的,保证上下文从零开始
     const old = state().chatId
     if (old) {
@@ -132,7 +141,7 @@ switch (cmd) {
   }
   default:
     out(`claude-dev 开发测试命令行(以机器人身份操作,不是用户):
-  setup                        确认/创建测试群(llm-bot dev)\n  new                          解散旧测试群并新建一个干净的(上下文从零开始)
+  setup                        确认/创建测试群(llm-bot dev)\n  invite                       把用户拉进当前测试群\n  new                          解散旧测试群并新建一个干净的(上下文从零开始)
   say <文字>                   不 @ 的普通发言(模拟群里别人聊天,只会成为上下文)\n  send <文字>                  @llm-bot 发消息,等处理完,打印完整运行记录(上下文/工具/token/耗时/答案)
   read [条数]                  读测试群最近的消息(bot 的卡片回复用本地记录补全)
   api <METHOD> <PATH> [json]   原样调用飞书 API
