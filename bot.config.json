@@ -1,11 +1,11 @@
 {
   "appId": "cli_aa4d2a5ea7f8dcb8",
-  "model": "deepseek/deepseek-chat",
+  "model": "deepseek/deepseek-flash",
   "providers": {
     "deepseek": {
       "models": [
-        "deepseek-chat",
-        "deepseek-reasoner"
+        "deepseek-flash",
+        "deepseek-v4-pro"
       ]
     }
   },

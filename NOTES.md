@@ -85,7 +85,7 @@
 - 回复:先回「思考中…」卡片,答案出来后 patch 更新同一条(用 `im:message:update`)
 - **provider / 模型可换**:`bot.config.json` 的 `providers`。不带 `baseURL` 的是 opencode 内置 provider(如 deepseek);带 `baseURL` 的是自定义 OpenAI 兼容 provider,key 从 `apiKeyEnv` 指定的环境变量读(放进 `.env`)。`model` 是默认模型,`/model` 只能在 providers 列出的模型里选。已用本地 mock 的 OpenAI 兼容服务验证过自定义 provider 链路
   - 示例:`"free1": {"name":"Free1","baseURL":"https://xxx/v1","apiKeyEnv":"FREE1_KEY","models":["model-a"]}`,再在 `.env` 加 `FREE1_KEY=...`,`npm run restart`
-- 命令(群里任何人都能改,按群保存):`/help` `/model` `/context` `/search` `/reset`;`/model` 只能选 deepseek-chat / deepseek-reasoner。后续再慢慢加
+- 命令(群里任何人都能改,按群保存):`/help` `/model` `/context` `/search` `/reset`;`/model` 只能选 bot.config.json 里 providers 列出的模型。后续再慢慢加
 - 可选白名单 `bot.config.json` 的 `allowedOpenIds`,空数组不限制;不做用量上限
 - opencode server 在空目录 `workspace/` 启动,关闭 bash/edit/read 等所有文件与命令工具,只留 webfetch/websearch
 - **配置与密钥分离**:普通配置(appId、模型、上下文条数、白名单)在 `bot.config.json`(提交);`.env` **只放** `FEISHU_APP_SECRET` 和 `DEEPSEEK_API_KEY`(不提交,每台机器手填)
@@ -98,4 +98,7 @@
 - [ ] 填 .env 并联调(`npm run up`)
 - [x] 后台:事件订阅 `im.message.receive_v1`(长连接)已配置
 - [x] 2026-10-08 版本 1.0.0 已发布(免审核)。可用范围目前只有应用所有者;免审核最多 owner + 5 人,要让更多人用需在版本的「可用范围」里加人
-- [ ] 真实群聊 @ 实测
+- [x] 2026-10-08 真实群聊 @ 实测:飞书收发、卡片回复链路通;首次 LLM 调用失败,原因是 opencode 的 DeepSeek 目录已改名,只剩 `deepseek-flash` / `deepseek-v4-pro`(没有 `deepseek-chat`/`deepseek-reasoner`)。已改配置,默认 `deepseek/deepseek-flash`
+- [x] 用 `npm run selftest -- "问题"` 在容器内直接测 LLM(含联网),已验证:普通问答 1s、联网查询 11s 正常
+- [ ] 群里再 @ 一次确认(改完模型名后)
+- 排查 LLM 报错:`docker compose exec bot sh -c 'tail -50 /home/node/.local/share/opencode/log/opencode.log'`;模型列表:`docker compose exec bot opencode models deepseek`

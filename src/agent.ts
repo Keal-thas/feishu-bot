@@ -51,6 +51,17 @@ export async function startAgent() {
     },
   })
 
+  // 启动时校验 bot.config.json 里的模型是否真的存在,模型改名时能立刻看到原因
+  try {
+    const res = await client.config.providers()
+    const known = new Set(
+      (res.data?.providers ?? []).flatMap((p: any) => Object.keys(p.models ?? {}).map((m) => `${p.id}/${m}`)),
+    )
+    for (const m of config.models) if (!known.has(m)) console.warn(`⚠️ 模型 ${m} 不在 opencode 可用列表里,调用会失败`)
+  } catch (e) {
+    console.warn("模型校验失败:", (e as Error).message)
+  }
+
   async function ask(question: string, context: string, opts: { model: string; search: boolean }): Promise<string> {
     const [providerID, ...rest] = opts.model.split("/")
     const session = await client.session.create({ body: { title: question.slice(0, 40) } })
