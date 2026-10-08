@@ -81,12 +81,13 @@
 - `src/index.ts` 飞书长连接 + 事件处理;`src/agent.ts` opencode 封装;`src/commands.ts` 斜杠命令;`src/settings.ts` 按群设置(`data/settings.json`);`src/config.ts` 读 .env
 - 只在**群里**工作:响应 @ 机器人的消息;私聊只回一句提示;忽略机器人消息、按 message_id 去重
 - LLM:DeepSeek(opencode 内置 provider)。本机直接跑会自动用 `~/.local/share/opencode/auth.json` 里已有的 deepseek 凭证;**Docker 里必须在 `.env` 填 `DEEPSEEK_API_KEY`**
-- 上下文:每次提问新建独立 session、用完即删;注入「群里最近 10 条且 30 分钟内所有成员发言 + 被回复的那条」(`CONTEXT_MESSAGES` / `CONTEXT_WINDOW_MINUTES`,上限 3000 字符)
+- 上下文:每次提问新建独立 session、用完即删;注入「群里最近 10 条且 30 分钟内所有成员发言 + 被回复的那条」(`bot.config.json` 的 `contextMessages` / `contextWindowMinutes`,上限 3000 字符)
 - 回复:先回「思考中…」卡片,答案出来后 patch 更新同一条(用 `im:message:update`)
 - 命令(群里任何人都能改,按群保存):`/help` `/model` `/context` `/search` `/reset`;`/model` 只能选 deepseek-chat / deepseek-reasoner。后续再慢慢加
-- 可选白名单 `ALLOWED_OPEN_IDS`,留空不限制;不做用量上限
+- 可选白名单 `bot.config.json` 的 `allowedOpenIds`,空数组不限制;不做用量上限
 - opencode server 在空目录 `workspace/` 启动,关闭 bash/edit/read 等所有文件与命令工具,只留 webfetch/websearch
-- **key 不进仓库**(决定:不加密、不上传),每台机器手填 `.env`
+- **配置与密钥分离**:普通配置(appId、模型、上下文条数、白名单)在 `bot.config.json`(提交);`.env` **只放** `FEISHU_APP_SECRET` 和 `DEEPSEEK_API_KEY`(不提交,每台机器手填)
+- 改 `bot.config.json` 后 `npm run restart` 即可,不用重建镜像
 - 运行:`cp .env.example .env` 填 `FEISHU_APP_SECRET`、`DEEPSEEK_API_KEY` → `npm run up`
 - ⚠️ 飞书「长连接」订阅方式要先让程序连上才能在后台保存,所以顺序是:先启动 → 再去后台选长连接 → 再发布
 - 已验证:Docker 镜像能构建,容器内 opencode 能启动,用假凭证会在飞书鉴权处按预期失败。**未做**真实端到端测试(没有密钥)

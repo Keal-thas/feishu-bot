@@ -3,5 +3,6 @@ services:
     build: .
     env_file: .env
     volumes:
-      - ./data:/app/data   # 每个群的设置,重启不丢
+      - ./data:/app/data                        # 每个群的设置,重启不丢
+      - ./bot.config.json:/app/bot.config.json:ro  # 改配置不用重建镜像,重启即可
     restart: "no"          # 手动启动,不自启
