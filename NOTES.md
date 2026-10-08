@@ -100,5 +100,13 @@
 - [x] 2026-10-08 版本 1.0.0 已发布(免审核)。可用范围目前只有应用所有者;免审核最多 owner + 5 人,要让更多人用需在版本的「可用范围」里加人
 - [x] 2026-10-08 真实群聊 @ 实测:飞书收发、卡片回复链路通;首次 LLM 调用失败,原因是 opencode 的 DeepSeek 目录已改名,只剩 `deepseek-flash` / `deepseek-v4-pro`(没有 `deepseek-chat`/`deepseek-reasoner`)。已改配置,默认 `deepseek/deepseek-flash`
 - [x] 用 `npm run selftest -- "问题"` 在容器内直接测 LLM(含联网),已验证:普通问答 1s、联网查询 11s 正常
-- [ ] 群里再 @ 一次确认(改完模型名后)
+- [x] 群里实测通过(2026-10-08):多人讨论上下文、单独 @、追问 bot 上一条回答、`/model`、联网查询(附来源)、容器重启后仍记得自己的回复
+- 飞书对新版卡片的历史消息只返回「请升级至最新版本客户端」,**读不到 bot 自己回复的内容**,所以 bot 的回复自己存到 `data/replies.json`(最近 200 条,重启不丢);读不到内容的机器人消息不放进上下文
+- 每次请求会在日志打 `[ctx]`,可看到实际带了哪些上下文:`npm run logs`
 - 排查 LLM 报错:`docker compose exec bot sh -c 'tail -50 /home/node/.local/share/opencode/log/opencode.log'`;模型列表:`docker compose exec bot opencode models deepseek`
+
+## 如何测试(给 Claude)
+- **直接在真实飞书里测**(用户已授权):Chrome 打开网页版 `https://www.feishu.cn/messenger/`,进「llm-bot 测试」群(chat_id 见日志 `[ctx]`),以用户身份发消息;`@` 机器人要输入 `@llm` 后回车选中,不能手打文字
+- 发完用 `docker compose logs --since 2m | grep -A14 "\[ctx\]"` 看 bot 实际带的上下文
+- 不经飞书直接测 LLM:`npm run selftest -- "问题"`
+- 只在「llm-bot 测试」群里测,不要动用户的其他群/会话;网页版没有「加入群聊」入口,邀请链接(applink)只能唤起桌面客户端

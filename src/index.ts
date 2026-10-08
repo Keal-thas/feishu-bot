@@ -3,6 +3,7 @@ import { config } from "./config.js"
 import { startAgent } from "./agent.js"
 import { runCommand } from "./commands.js"
 import { getSettings } from "./settings.js"
+import { getReply, rememberReply } from "./replies.js"
 
 const base = { appId: config.appId, appSecret: config.appSecret, domain: Lark.Domain.Feishu }
 const api = new Lark.Client(base)
@@ -24,13 +25,6 @@ function isDup(id: string): boolean {
   return false
 }
 
-// bot 自己发的是卡片,拉历史时读不到内容,所以按 message_id 记住最近的回复
-const botReplies = new Map<string, string>()
-function rememberReply(id: string, text: string) {
-  botReplies.set(id, text)
-  if (botReplies.size > 200) botReplies.delete(botReplies.keys().next().value!)
-}
-
 function textOf(msgType: string, content: string, mentions?: any[]): string {
   let out = `[${msgType}]`
   try {
@@ -46,25 +40,25 @@ function textOf(msgType: string, content: string, mentions?: any[]): string {
 }
 
 /** 群聊上下文:最近 N 条且在时间窗内的所有成员发言,加被回复的那条。不拉整个聊天记录 */
-async function buildContext(chatId: string, currentId: string, parentId: string | undefined, n: number): Promise<string> {
+async function buildContext(chatId: string, skipIds: string[], parentId: string | undefined, n: number): Promise<string> {
   const lines: string[] = []
   if (n > 0) {
     try {
       const res = await api.im.message.list({
-        params: { container_id_type: "chat", container_id: chatId, sort_type: "ByCreateTimeDesc", page_size: n + 1 },
+        params: { container_id_type: "chat", container_id: chatId, sort_type: "ByCreateTimeDesc", page_size: n + 3 },
       })
       const since = Date.now() - config.contextWindowMinutes * 60_000
       const labels = new Map<string, string>()
       const items = (res.data?.items ?? [])
-        .filter((m) => m.message_id !== currentId && !m.deleted && m.body?.content && Number(m.create_time) >= since)
+        .filter((m) => !skipIds.includes(m.message_id!) && !m.deleted && m.body?.content && Number(m.create_time) >= since)
         .slice(0, n)
         .reverse()
       for (const m of items) {
         const sid = m.sender?.id ?? "?"
         const isBot = m.sender?.sender_type === "app"
         const who = isBot ? "机器人" : labels.get(sid) ?? (labels.set(sid, `成员${labels.size + 1}`), labels.get(sid)!)
-        const text = (isBot && botReplies.get(m.message_id!)) || textOf(m.msg_type ?? "text", m.body!.content, m.mentions as any[])
-        lines.push(`${who}: ${text}`)
+        const text = isBot ? getReply(m.message_id!) : textOf(m.msg_type ?? "text", m.body!.content, m.mentions as any[])
+        if (text) lines.push(`${who}: ${text}`) // 读不到内容的机器人消息(如重启前的卡片)直接跳过
       }
     } catch (e) {
       console.warn("拉取上下文失败(可能缺权限):", (e as Error).message)
@@ -74,7 +68,7 @@ async function buildContext(chatId: string, currentId: string, parentId: string 
     try {
       const p = await api.im.message.get({ path: { message_id: parentId } })
       const m = p.data?.items?.[0]
-      if (m?.body?.content) lines.push(`(被回复的消息) ${botReplies.get(parentId) ?? textOf(m.msg_type ?? "text", m.body.content, m.mentions as any[])}`)
+      if (m?.body?.content) lines.push(`(被回复的消息) ${getReply(parentId) ?? textOf(m.msg_type ?? "text", m.body.content, m.mentions as any[])}`)
     } catch {}
   }
   return lines.join("\n").slice(-config.contextMaxChars)
@@ -123,7 +117,7 @@ async function handle(data: any) {
   let answer: string
   try {
     const s = getSettings(msg.chat_id)
-    const context = await buildContext(msg.chat_id, msg.message_id, msg.parent_id, s.context)
+    const context = await buildContext(msg.chat_id, [msg.message_id, cardId ?? ""], msg.parent_id, s.context)
     console.log(`[ctx] chat=${msg.chat_id} q=${JSON.stringify(question)} ctx_chars=${context.length}\n${context}`)
     answer = await agent.ask(question, context, s)
   } catch (e) {

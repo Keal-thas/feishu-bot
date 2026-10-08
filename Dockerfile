@@ -9,4 +9,4 @@ COPY src ./src
 RUN mkdir -p data workspace && chown -R node:node /app
 USER node
 ENV DATA_DIR=/app/data
-CMD ["npx", "tsx", "src/index.ts"]
+CMD ["node_modules/.bin/tsx", "src/index.ts"]
