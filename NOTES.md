@@ -51,7 +51,8 @@
 - [x] 已有应用 `test-claw-bot`(旧的)
 - [x] 2026-10-08 新建企业自建应用 **llm-bot**,App ID `cli_aa4d2a5ea7f8dcb8`,已添加「机器人」能力
   - 控制台:https://open.feishu.cn/app/cli_aa4d2a5ea7f8dcb8
-- [ ] 权限管理:开通 `im:message` 等权限
+- [x] 权限管理:2026-10-08 已开通全部 22 项 `im:message*`(应用身份,均免审),含敏感权限 `im:message.group_msg`
+  - ⚠️ 开了 `group_msg` 后群里**每条**消息都会推给程序,代码里必须只处理 @ 机器人的消息,否则白烧 LLM token
 - [ ] 事件与回调:订阅 `im.message.receive_v1`,方式选长连接
 - [ ] App Secret 存入 `.env`(别提交)
 - [ ] 创建版本并发布
