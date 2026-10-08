@@ -176,3 +176,21 @@
 - 实名认证要提交身份信息,**只能用户本人做**,Claude 不碰
 - 文档里的限制(没实测,等认证后才能测):外部群里**只支持消息与群组里的部分 API 权限**——llm-bot 拉群历史(`im.message.list`)当上下文**可能受限**;外部用户必须先发起对话,机器人不能主动搭话;外部用户拿不到 user_access_token(我们只用 tenant 令牌,不受影响)
 - 没认证的替代办法:未验证。不要假设能把好友加成「本租户成员」(个人版没有管理员后台)
+
+## OpenRouter 免费模型(2026-10-09 实测)
+- key 在 `.env` 的 `OPENROUTER_API_KEY`(用户在对话里贴出,账号是免费层 `is_free_tier=true`)
+- **免费额度(官方文档,按账号计,不是按 key,多建 key 没用)**:`:free` 模型每分钟 20 次;每天 **50 次**(累计充值 <$10)或 **1000 次**(充值 ≥$10)。文档只限请求次数,没有 token 限制。超限返回 HTTP 429。查剩余:`curl -s https://openrouter.ai/api/v1/key -H "Authorization: Bearer $OPENROUTER_API_KEY"` 的 `free_model_daily_requests`(注意该计数有延迟,我测完 ~15 次仍显示 0)
+- ⚠️ **一次联网提问会消耗多个请求**(模型调工具搜索一次、读结果后再答一次,通常 2~3 次),所以 50 次/天 ≈ **15~25 个联网问题**,别拿它当主力;DeepSeek 仍是默认
+- 全站 467 个模型里 20 个真免费(输入输出价格都为 0),17 个支持工具调用。已加入 `bot.config.json` 并实测可用:
+  - `thinkingmachines/inkling:free`(联网 5.7s,最快,1M 上下文)✅联网
+  - `nvidia/nemotron-3-super-120b-a12b:free`(联网 11.9s)✅联网
+  - `apodex/apodex-1.1-mini:free`(联网 7.5s)✅联网
+  - `nvidia/nemotron-3-ultra-550b-a55b:free`、`nvidia/nemotron-3.5-lightning:free`、`openrouter/free`(自动路由到某个免费模型,11.5s):只测过普通问答
+- 没加入:`google/gemma-4-31b-it:free`(上游限流 429)、`inclusionai/ling-3.1-flash`(44s 太慢)、`poolside/laguna-s-2.1:free`(73s 太慢);其余的没测
+- 群里切换:`/model inkling`(支持模糊匹配,唯一包含即选中;多个匹配会列出候选)
+
+## 踩坑:新容器里新模型 Model not found(已修)
+- 现象:`npm run up` 新建容器后,`opencode/space-bunny-free`、`openrouter/apodex/...` 等新上架模型报 `ProviderModelNotFoundError`,而用 `opencode models`/selftest 又能看到
+- 原因:新容器缓存为空,opencode 服务器先用内置旧快照启动,约 1 分钟后才后台下载新模型目录,且**不会重新加载**;`opencode models` 预热命令在下载完成前就退出了,没用
+- 修复:`scripts/warm-catalog.mjs` 在 bot 启动前**同步**下载 `models.dev/api.json` 到缓存;Dockerfile 的 CMD 先跑它。同时启动时模型校验改用完整目录并等待重试
+- 排查 `Unexpected server error`:`docker compose exec bot sh -c 'grep err_xxxx /home/node/.local/share/opencode/log/opencode.log'`

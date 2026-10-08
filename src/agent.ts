@@ -51,16 +51,28 @@ export async function startAgent() {
     },
   })
 
-  // 启动时校验 bot.config.json 里的模型是否真的存在,模型改名时能立刻看到原因
-  try {
-    const res = await client.config.providers()
-    const known = new Set(
-      (res.data?.providers ?? []).flatMap((p: any) => Object.keys(p.models ?? {}).map((m) => `${p.id}/${m}`)),
+  // 校验 bot.config.json 里的模型是否真的存在,模型改名时能立刻看到原因。
+  // 容器刚创建时缓存是空的,opencode 要先下载最新模型目录(含新上架的模型),期间只有旧快照,所以缺失的最多等约 1 分钟再确认,仍缺失才警告(放后台,不拖慢启动)
+  async function missingModels(): Promise<string[]> {
+    // config.providers() 会漏掉一些实验性/新上架但能正常调用的模型,用完整目录 provider.list() 校验
+    const res: any = await client.provider.list()
+    const known = new Set<string>(
+      (res.data?.all ?? []).flatMap((p: any) => Object.keys(p.models ?? {}).map((m) => `${p.id}/${m}`)),
     )
-    for (const m of config.models) if (!known.has(m)) console.warn(`⚠️ 模型 ${m} 不在 opencode 可用列表里,调用会失败`)
-  } catch (e) {
-    console.warn("模型校验失败:", (e as Error).message)
+    return config.models.filter((m) => !known.has(m))
   }
+  void (async () => {
+    try {
+      let missing = await missingModels()
+      for (let i = 0; i < 12 && missing.length; i++) {
+        await new Promise((r) => setTimeout(r, 5000))
+        missing = await missingModels()
+      }
+      for (const m of missing) console.warn(`⚠️ 模型 ${m} 不在 opencode 可用列表里,调用会失败`)
+    } catch (e) {
+      console.warn("模型校验失败:", (e as Error).message)
+    }
+  })()
 
   type Tool = { tool: string; status: string; input: unknown; output?: string; error?: string; ms?: number }
   type Result = { answer: string; tools: Tool[]; tokens?: unknown; cost?: number; sessionId: string }

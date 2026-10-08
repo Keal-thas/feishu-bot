@@ -12,6 +12,16 @@
       "models": [
         "space-bunny-free"
       ]
+    },
+    "openrouter": {
+      "models": [
+        "thinkingmachines/inkling:free",
+        "nvidia/nemotron-3-super-120b-a12b:free",
+        "apodex/apodex-1.1-mini:free",
+        "nvidia/nemotron-3-ultra-550b-a55b:free",
+        "nvidia/nemotron-3.5-lightning:free",
+        "openrouter/free"
+      ]
     }
   },
   "contextMessages": 10,
