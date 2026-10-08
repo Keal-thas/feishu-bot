@@ -1,7 +1,7 @@
 import { config } from "./config.js"
 import { getSettings, resetSettings, updateSettings } from "./settings.js"
 
-const short = (m: string) => m.replace(/^deepseek\//, "")
+const short = (m: string) => m
 
 function status(chatId: string): string {
   const s = getSettings(chatId)
@@ -29,7 +29,7 @@ export function runCommand(chatId: string, text: string): string | null {
 
     case "/model": {
       if (!arg) return `当前模型:${short(getSettings(chatId).model)}\n可选:${config.models.map(short).join("、")}`
-      const hit = config.models.find((m) => m === arg || short(m) === arg)
+      const hit = config.models.find((m) => m === arg) ?? config.models.filter((m) => m.endsWith(`/${arg}`)).find((_, __, a) => a.length === 1)
       if (!hit) return `不支持的模型「${arg}」。可选:${config.models.map(short).join("、")}`
       updateSettings(chatId, { model: hit })
       return `已切换模型:${short(hit)}`

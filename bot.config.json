@@ -1,7 +1,14 @@
 {
   "appId": "cli_aa4d2a5ea7f8dcb8",
   "model": "deepseek/deepseek-chat",
-  "models": ["deepseek/deepseek-chat", "deepseek/deepseek-reasoner"],
+  "providers": {
+    "deepseek": {
+      "models": [
+        "deepseek-chat",
+        "deepseek-reasoner"
+      ]
+    }
+  },
   "contextMessages": 10,
   "contextWindowMinutes": 30,
   "contextMaxChars": 3000,
