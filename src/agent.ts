@@ -82,6 +82,9 @@ export async function startAgent() {
         },
       })
       if (!res.data) throw new Error(JSON.stringify(res.error))
+      // 模型/供应商报错时,错误在 assistant 消息的 info.error 里,不是 HTTP 错误;原样抛出
+      const perr = (res.data.info as any)?.error
+      if (perr) throw new Error(JSON.stringify(perr))
       // 一次提问会被 opencode 拆成多条 assistant 消息(调工具、再写答案),所以读整个会话来汇总
       const all = await client.session.messages({ path: { id: sessionId } })
       const msgs = (all.data ?? []) as any[]

@@ -137,3 +137,27 @@
 - 目的:让 Claude Code 以「机器人身份」往测试群 @ llm-bot 发消息、读群消息,配合 `npm run trace` 看 llm-bot 实际带的上下文和工具调用
 - 限制:飞书 API 不能冒充用户发消息,发送者是机器人。llm-bot 对发送者**不设限**(用户或其他机器人 @ 都响应),只忽略自己发的消息;用户明确说不需要信任名单、也不担心 key 用量
 - 注意:open_id 是按应用隔离的,同一个人在 llm-bot 和 claude-dev 下的 open_id 不同;跨应用要用 union_id(llm-bot 的 trace 里 `sender_ids` 有)
+
+## 免费模型 / 可接的 provider(2026-10-08 实测)
+**opencode 自家的免费模型(`opencode` provider,不需要 key)**:列表有 12 个,**只有 `opencode/space-bunny-free` 能用**。其余 11 个(big-pickle、exo-free、ling-*、nemotron-3-*、step-5-preview-free 等)在我们的服务器里一律返回 403 `OpenCode's free tier can only be used from within OpenCode`——供应商限制只能在 OpenCode 自己的客户端里用,**不去绕**。本机 `opencode run` 能用,但那是 OpenCode 客户端本身。
+- `space-bunny-free` 已加进 `bot.config.json`,实测:普通问答、`websearch`+`webfetch` 联网、`/model` 切换都正常(联网问答约 8~13 秒)
+- 它哪天被同样限制时,群里会原样显示 403,启动时模型校验也会提示
+
+**opencode 内置、只要在 `.env` 配 key 就能用的 provider**(环境变量名已用 `opencode models` 实测会让对应 provider 出现):
+| provider | 环境变量 | 目录里的模型数 |
+|---|---|---|
+| openrouter | `OPENROUTER_API_KEY` | 391(其中 16 个 `:free`,如 `google/gemma-4-31b-it:free`、`nvidia/nemotron-3-ultra-550b-a55b:free`) |
+| groq | `GROQ_API_KEY` | 16 |
+| cerebras | `CEREBRAS_API_KEY` | 2 |
+| google | `GOOGLE_GENERATIVE_AI_API_KEY` | 38 |
+| mistral | `MISTRAL_API_KEY` | 20 |
+| nvidia | `NVIDIA_API_KEY` | 57 |
+| siliconflow | `SILICONFLOW_API_KEY` | 57 |
+| huggingface | `HF_TOKEN` | 78 |
+| togetherai / fireworks-ai / xai / moonshotai / zhipuai | `TOGETHER_API_KEY` / `FIREWORKS_API_KEY` / `XAI_API_KEY` / `MOONSHOT_API_KEY` / `ZHIPU_API_KEY` | 18 / 37 / 13 / 4 / 17 |
+- 各家免费额度、限速以官网为准,我没有逐一核实
+- 查某家有哪些模型:`docker compose exec -e OPENROUTER_API_KEY=x bot opencode models openrouter`(key 随便填一个假的也能列出目录)
+- 添加步骤:① `.env` 加真 key;② `bot.config.json` 的 `providers` 加一项,如 `"openrouter": {"models": ["google/gemma-4-31b-it:free"]}`(内置 provider 不用写 baseURL);③ `npm run restart`;④ 群里 `/model openrouter/google/gemma-4-31b-it:free`
+- **不在上表里的任何 OpenAI 兼容服务**:用自定义 provider(写 `baseURL` + `apiKeyEnv`),示例见上面「provider / 模型可换」
+- ⚠️ 免费模型常常不支持工具调用,或调用不稳;不支持就在群里 `/search off`,或换模型
+- ⚠️ 加了 key 但没配模型名会在启动日志里看到「模型 xxx 不在 opencode 可用列表里」,以此排查
