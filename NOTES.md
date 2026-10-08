@@ -29,9 +29,10 @@
 
 ## 运行环境
 - 本机:Mac mini (Mac16,10),Apple M4,16GB,macOS 26.4
-- **本地 LLM(如 Ollama)一律放 Docker 里跑**
-  - 注意:Docker Desktop 的容器在 macOS 上用不到 Metal GPU,Apple Silicon 上会走 CPU,较慢;若要 GPU 加速需 Ollama 原生运行。选 Docker 是已定的决定,性能不够时再重新评估。
-  - 16GB 内存,模型建议 7B~8B 量级
+- **LLM 用的是购买的外部 API token(非自部署)**,所以暂不需要本地模型
+  - 若以后要跑本地 LLM(如 Ollama),决定放 Docker 里跑
+  - 注意:Docker Desktop 的容器在 macOS 上用不到 Metal GPU,会走 CPU,较慢
+- 本机已装:node、npm、docker、opencode(`/opt/homebrew/bin/opencode`)
 
 ## 语言选型
 - 倾向 **Node.js / TypeScript**:opencode SDK、pi 都是 TS,飞书也有官方 `@larksuiteoapi/node-sdk`
@@ -55,6 +56,25 @@
 - [ ] App Secret 存入 `.env`(别提交)
 - [ ] 创建版本并发布
 
+## 已决定(2026-10-08)
+- Agent 层:**opencode SDK**(`@opencode-ai/sdk`,取根入口即 v1 API;包还导出 `./v2` 子路径,不用)
+  - npm latest 1.18.35。注意 dist-tag `v1` 是 2025-10 的旧快照(0.0.0-v1-...),**别装那个**
+- 语言:Node.js / TypeScript
+- 需求:群里 @bot 时能简单查网页资料,拿到几条上下文
+
+## 联网查询要点(opencode)
+- `webfetch`:默认可用,无需配置
+- `websearch`:需 opencode/OpenCode Go provider,**或设环境变量 `OPENCODE_ENABLE_EXA=1`(或 `OPENCODE_ENABLE_PARALLEL=1`)**;无需 API key
+- 工具开关通过 `opencode.json` 的 `permission` 字段(allow / deny / ask);bot 无人值守,必须设成 allow 或 deny,不能 ask
+- 自带 token 的外部 LLM:在 opencode config 里配 provider(baseURL + apiKey),不要写进仓库
+
+## 飞书权限(tenant_access_token,im:message* 共 22 项,全部免审)
+需要的最小集合(拟开通):
+- `im:message:send_as_bot` 以应用身份发消息
+- `im:message.p2p_msg:readonly` 读取单聊
+- `im:message.group_at_msg:readonly` 群里 @ 机器人
+- 可选:`im:message:readonly`、`im:message:update`(更新卡片/流式)、`im:message.reactions:write_only`(加表情表示处理中)
+
 ## 待定
-- [ ] LLM 调用方式(Docker 里的本地模型 / 远程 OpenAI 兼容 API)
-- [ ] 选 pi 还是 opencode SDK 还是纯 API
+- [ ] 外部 LLM 的 provider / baseURL / 模型名
+- [ ] 确认要开通的权限清单
