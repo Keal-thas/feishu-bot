@@ -27,6 +27,34 @@
 - 飞书无原生流式 → 先发卡片,再 patch 更新内容
 - 多轮上下文自己按 `chat_id` 存
 
+## 运行环境
+- 本机:Mac mini (Mac16,10),Apple M4,16GB,macOS 26.4
+- **本地 LLM(如 Ollama)一律放 Docker 里跑**
+  - 注意:Docker Desktop 的容器在 macOS 上用不到 Metal GPU,Apple Silicon 上会走 CPU,较慢;若要 GPU 加速需 Ollama 原生运行。选 Docker 是已定的决定,性能不够时再重新评估。
+  - 16GB 内存,模型建议 7B~8B 量级
+
+## 语言选型
+- 倾向 **Node.js / TypeScript**:opencode SDK、pi 都是 TS,飞书也有官方 `@larksuiteoapi/node-sdk`
+- Python 也可行(`lark-oapi`),但接 opencode / pi 要多一层
+
+## Agent 层候选
+| 方案 | 特点 | 适合度 |
+|---|---|---|
+| **pi** (`@mariozechner/pi-coding-agent` / `pi-agent-core` / `pi-ai`) | 极简(4 个工具 + 短 prompt),可作为 SDK 嵌入;OpenClaw 就是用它做消息机器人 | 聊天机器人场景最贴合 |
+| **opencode SDK** (`@opencode-ai/sdk`) | 起 server + 类型安全 client,session/事件流/文件操作齐全,偏编码 agent | 需要让 bot 操作代码/文件时合适 |
+| 仅普通对话 | 直接调 LLM API(或 Vercel AI SDK),不需要 agent 框架 | 最简单 |
+
+> 飞书后台首页还有「创建飞书智能体应用」入口,预置权限/事件,面向 OpenClaw、Hermes Agent 这类智能体接入。
+
+## 飞书应用进度
+- [x] 已有应用 `test-claw-bot`(旧的)
+- [x] 2026-10-08 新建企业自建应用 **llm-bot**,App ID `cli_aa4d2a5ea7f8dcb8`,已添加「机器人」能力
+  - 控制台:https://open.feishu.cn/app/cli_aa4d2a5ea7f8dcb8
+- [ ] 权限管理:开通 `im:message` 等权限
+- [ ] 事件与回调:订阅 `im.message.receive_v1`,方式选长连接
+- [ ] App Secret 存入 `.env`(别提交)
+- [ ] 创建版本并发布
+
 ## 待定
-- [ ] LLM 调用方式(OpenAI 兼容 / Ollama / 其他)
-- [ ] 语言选型(默认 Python)
+- [ ] LLM 调用方式(Docker 里的本地模型 / 远程 OpenAI 兼容 API)
+- [ ] 选 pi 还是 opencode SDK 还是纯 API
