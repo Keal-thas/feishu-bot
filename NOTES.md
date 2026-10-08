@@ -76,6 +76,16 @@
 - `im:message.group_at_msg:readonly` 群里 @ 机器人
 - 可选:`im:message:readonly`、`im:message:update`(更新卡片/流式)、`im:message.reactions:write_only`(加表情表示处理中)
 
+## 代码(已写,待联调)
+- `src/index.ts` 飞书长连接 + 事件处理;`src/agent.ts` opencode 封装;`src/config.ts` 读 .env
+- LLM:DeepSeek(opencode 内置 provider,模型 `deepseek/deepseek-chat`,key 走环境变量 `DEEPSEEK_API_KEY`)
+- 上下文策略:每次提问**新建独立 session、用完即删**;上下文只注入「最近 6 条聊天 + 被回复的那条」(`CONTEXT_MESSAGES`,上限 2000 字符),不带整个聊天历史
+- 群里只响应 @ 机器人的消息;私聊全部响应;忽略机器人消息、按 message_id 去重
+- opencode server 在空目录 `workspace/` 启动,并关闭 bash/edit/read 等所有文件与命令工具,只留 webfetch/websearch
+- 运行:`cp .env.example .env` 填 `FEISHU_APP_SECRET` 和 `DEEPSEEK_API_KEY`,然后 `npm start`
+- ⚠️ 飞书「长连接」订阅方式要先让程序连上才能在后台保存,所以顺序是:先 `npm start` → 再去后台选长连接 → 再发布
+
 ## 待定
-- [ ] 外部 LLM 的 provider / baseURL / 模型名
-- [ ] 确认要开通的权限清单
+- [ ] 填 .env 并联调
+- [ ] 后台:事件订阅 `im.message.receive_v1`(长连接)
+- [ ] 创建版本并发布
