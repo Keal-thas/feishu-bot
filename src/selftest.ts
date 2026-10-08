@@ -7,7 +7,7 @@ const agent = await startAgent()
 const t = Date.now()
 try {
   const a = await agent.ask(q, "", { model: process.env.SELFTEST_MODEL ?? config.defaults.model, search: config.defaults.search })
-  console.log(`✅ ${config.defaults.model} (${((Date.now() - t) / 1000).toFixed(1)}s)\n${a}`)
+  console.log(`✅ ${process.env.SELFTEST_MODEL ?? config.defaults.model} (${((Date.now() - t) / 1000).toFixed(1)}s) tools=${a.tools.map((x) => x.tool).join(",") || "-"}\n${a.answer}`)
 } catch (e) {
   console.error("❌", (e as Error).message)
   process.exitCode = 1

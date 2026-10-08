@@ -62,7 +62,10 @@ export async function startAgent() {
     console.warn("模型校验失败:", (e as Error).message)
   }
 
-  async function ask(question: string, context: string, opts: { model: string; search: boolean }): Promise<string> {
+  type Tool = { tool: string; status: string; input: unknown; output?: string; error?: string; ms?: number }
+  type Result = { answer: string; tools: Tool[]; tokens?: unknown; cost?: number; sessionId: string }
+
+  async function ask(question: string, context: string, opts: { model: string; search: boolean }): Promise<Result> {
     const [providerID, ...rest] = opts.model.split("/")
     const session = await client.session.create({ body: { title: question.slice(0, 40) } })
     const sessionId = session.data?.id
@@ -79,12 +82,35 @@ export async function startAgent() {
         },
       })
       if (!res.data) throw new Error(JSON.stringify(res.error))
-      const answer = res.data.parts
+      // 一次提问会被 opencode 拆成多条 assistant 消息(调工具、再写答案),所以读整个会话来汇总
+      const all = await client.session.messages({ path: { id: sessionId } })
+      const msgs = (all.data ?? []) as any[]
+      const assistant = msgs.filter((m) => m.info?.role === "assistant")
+      const parts = assistant.flatMap((m) => m.parts ?? []) as any[]
+      const answer = (res.data.parts as any[])
         .filter((p) => p.type === "text")
-        .map((p) => (p as { text: string }).text)
+        .map((p) => p.text as string)
         .join("\n")
         .trim()
-      return answer || "(没有得到回复)"
+      const tools: Tool[] = parts
+        .filter((p) => p.type === "tool")
+        .map((p) => ({
+          tool: p.tool,
+          status: p.state.status,
+          input: p.state.input,
+          output: typeof p.state.output === "string" ? p.state.output.slice(0, 2000) : undefined,
+          error: p.state.error,
+          ms: p.state.time?.end && p.state.time?.start ? p.state.time.end - p.state.time.start : undefined,
+        }))
+      const tokens = { input: 0, output: 0, reasoning: 0 }
+      let cost = 0
+      for (const m of assistant) {
+        tokens.input += m.info.tokens?.input ?? 0
+        tokens.output += m.info.tokens?.output ?? 0
+        tokens.reasoning += m.info.tokens?.reasoning ?? 0
+        cost += m.info.cost ?? 0
+      }
+      return { answer: answer || "(没有得到回复)", tools, tokens, cost, sessionId }
     } finally {
       // 每次提问独立 session,用完即删,上下文只来自我们注入的那几条
       await client.session.delete({ path: { id: sessionId } }).catch(() => {})

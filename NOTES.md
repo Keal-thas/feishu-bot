@@ -110,3 +110,8 @@
 - 发完用 `docker compose logs --since 2m | grep -A14 "\[ctx\]"` 看 bot 实际带的上下文
 - 不经飞书直接测 LLM:`npm run selftest -- "问题"`
 - 只在「llm-bot 测试」群里测,不要动用户的其他群/会话;网页版没有「加入群聊」入口,邀请链接(applink)只能唤起桌面客户端
+
+## 运行记录(给开发 agent 用)
+- 每次请求写一行到 `data/traces.jsonl`(不进 git):原话、发送者、设置、**实际带的上下文**、工具调用(搜索词/抓取的网页/耗时/返回)、token 与费用、各阶段耗时、**原始错误**、最终答案
+- 查看:`npm run trace -- 3`(最近 3 条,人类可读);`npm run trace -- 3 --json` 看原始 JSON
+- 注意:opencode 一次提问会拆成多条 assistant 消息(调工具、再写答案),必须读整个会话才能拿到工具调用,只看 prompt 返回的最后一条会漏

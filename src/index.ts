@@ -4,6 +4,7 @@ import { startAgent } from "./agent.js"
 import { runCommand } from "./commands.js"
 import { getSettings } from "./settings.js"
 import { getReply, rememberReply } from "./replies.js"
+import { writeTrace } from "./trace.js"
 
 const base = { appId: config.appId, appSecret: config.appSecret, domain: Lark.Domain.Feishu }
 const api = new Lark.Client(base)
@@ -104,8 +105,16 @@ async function handle(data: any) {
   // 只 @ 了机器人、没写别的:让它回应上面群聊里最近的话题
   if (!question) question = "(只 @ 了你,没有附加文字。请直接回应群聊上下文里最近的问题或话题。)"
 
+  const t0 = Date.now()
+  const trace: Record<string, unknown> = {
+    chat: msg.chat_id, sender: senderId, message_id: msg.message_id, question,
+  }
+
   const cmd = runCommand(msg.chat_id, question)
-  if (cmd !== null) return void (await replyText(msg.message_id, cmd))
+  if (cmd !== null) {
+    await replyText(msg.message_id, cmd)
+    return writeTrace({ ...trace, kind: "command", answer: cmd, timings: { total_ms: Date.now() - t0 } })
+  }
 
   // 先回「思考中」卡片,答案出来后更新同一条
   const placeholder = await api.im.message.reply({
@@ -115,18 +124,31 @@ async function handle(data: any) {
   const cardId = placeholder.data?.message_id
 
   let answer: string
+  const timings: Record<string, number> = {}
   try {
     const s = getSettings(msg.chat_id)
+    trace.settings = s
+    const tc = Date.now()
     const context = await buildContext(msg.chat_id, [msg.message_id, cardId ?? ""], msg.parent_id, s.context)
+    timings.context_ms = Date.now() - tc
+    trace.context = context
     console.log(`[ctx] chat=${msg.chat_id} q=${JSON.stringify(question)} ctx_chars=${context.length}\n${context}`)
-    answer = await agent.ask(question, context, s)
+    const tl = Date.now()
+    const r = await agent.ask(question, context, s)
+    timings.llm_ms = Date.now() - tl
+    answer = r.answer
+    Object.assign(trace, { tools: r.tools, tokens: r.tokens, cost: r.cost })
   } catch (e) {
     console.error("处理失败:", e)
     answer = (e as Error).message // 原样输出,不再包一层
+    trace.error = answer
   }
+  trace.answer = answer
   if (cardId) rememberReply(cardId, answer)
   if (cardId) await api.im.message.patch({ path: { message_id: cardId }, data: { content: card(answer) } })
   else await replyText(msg.message_id, answer)
+  timings.total_ms = Date.now() - t0
+  writeTrace({ ...trace, kind: "question", timings })
 }
 
 const dispatcher = new Lark.EventDispatcher({}).register({
