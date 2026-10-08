@@ -17,9 +17,10 @@
 > 不要用「自定义机器人」(群 webhook),它只能发不能收。
 
 ## 部署
-- 长连接(WebSocket)模式:无需公网 IP / 域名,个人电脑可跑,但电脑休眠就离线
-- Webhook 模式:需要公网 HTTPS,3 秒内响应
-- 要 24h 在线 → 放到云服务器,代码不用改
+- 跑在**自己的 Mac mini 上**,机器 24 小时不关机、不休眠,**不需要云服务器**
+- 用长连接(WebSocket)模式:无需公网 IP / 域名(Webhook 模式才要公网 HTTPS,不用)
+- 放 Docker 里跑,**手动启动,不做开机自启**:`npm run up` / `npm run down` / `npm run logs`
+- 启动前先打开 Docker Desktop
 
 ## 注意点
 - SDK 叫 `lark-oapi`,但 domain 要用 `lark.FEISHU_DOMAIN`
@@ -77,15 +78,20 @@
 - 可选:`im:message:readonly`、`im:message:update`(更新卡片/流式)、`im:message.reactions:write_only`(加表情表示处理中)
 
 ## 代码(已写,待联调)
-- `src/index.ts` 飞书长连接 + 事件处理;`src/agent.ts` opencode 封装;`src/config.ts` 读 .env
-- LLM:DeepSeek(opencode 内置 provider,模型 `deepseek/deepseek-chat`,key 走环境变量 `DEEPSEEK_API_KEY`)
-- 上下文策略:每次提问**新建独立 session、用完即删**;上下文只注入「最近 6 条聊天 + 被回复的那条」(`CONTEXT_MESSAGES`,上限 2000 字符),不带整个聊天历史
-- 群里只响应 @ 机器人的消息;私聊全部响应;忽略机器人消息、按 message_id 去重
-- opencode server 在空目录 `workspace/` 启动,并关闭 bash/edit/read 等所有文件与命令工具,只留 webfetch/websearch
-- 运行:`cp .env.example .env` 填 `FEISHU_APP_SECRET` 和 `DEEPSEEK_API_KEY`,然后 `npm start`
-- ⚠️ 飞书「长连接」订阅方式要先让程序连上才能在后台保存,所以顺序是:先 `npm start` → 再去后台选长连接 → 再发布
+- `src/index.ts` 飞书长连接 + 事件处理;`src/agent.ts` opencode 封装;`src/commands.ts` 斜杠命令;`src/settings.ts` 按群设置(`data/settings.json`);`src/config.ts` 读 .env
+- 只在**群里**工作:响应 @ 机器人的消息;私聊只回一句提示;忽略机器人消息、按 message_id 去重
+- LLM:DeepSeek(opencode 内置 provider)。本机直接跑会自动用 `~/.local/share/opencode/auth.json` 里已有的 deepseek 凭证;**Docker 里必须在 `.env` 填 `DEEPSEEK_API_KEY`**
+- 上下文:每次提问新建独立 session、用完即删;注入「群里最近 10 条且 30 分钟内所有成员发言 + 被回复的那条」(`CONTEXT_MESSAGES` / `CONTEXT_WINDOW_MINUTES`,上限 3000 字符)
+- 回复:先回「思考中…」卡片,答案出来后 patch 更新同一条(用 `im:message:update`)
+- 命令(群里任何人都能改,按群保存):`/help` `/model` `/context` `/search` `/reset`;`/model` 只能选 deepseek-chat / deepseek-reasoner。后续再慢慢加
+- 可选白名单 `ALLOWED_OPEN_IDS`,留空不限制;不做用量上限
+- opencode server 在空目录 `workspace/` 启动,关闭 bash/edit/read 等所有文件与命令工具,只留 webfetch/websearch
+- **key 不进仓库**(决定:不加密、不上传),每台机器手填 `.env`
+- 运行:`cp .env.example .env` 填 `FEISHU_APP_SECRET`、`DEEPSEEK_API_KEY` → `npm run up`
+- ⚠️ 飞书「长连接」订阅方式要先让程序连上才能在后台保存,所以顺序是:先启动 → 再去后台选长连接 → 再发布
+- 已验证:Docker 镜像能构建,容器内 opencode 能启动,用假凭证会在飞书鉴权处按预期失败。**未做**真实端到端测试(没有密钥)
 
 ## 待定
-- [ ] 填 .env 并联调
+- [ ] 填 .env 并联调(`npm run up`)
 - [ ] 后台:事件订阅 `im.message.receive_v1`(长连接)
 - [ ] 创建版本并发布

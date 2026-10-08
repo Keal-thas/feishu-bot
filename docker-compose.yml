@@ -1,0 +1,7 @@
+services:
+  bot:
+    build: .
+    env_file: .env
+    volumes:
+      - ./data:/app/data   # 每个群的设置,重启不丢
+    restart: "no"          # 手动启动,不自启

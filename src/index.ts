@@ -1,6 +1,8 @@
 import * as Lark from "@larksuiteoapi/node-sdk"
 import { config } from "./config.js"
 import { startAgent } from "./agent.js"
+import { runCommand } from "./commands.js"
+import { getSettings } from "./settings.js"
 
 const base = { appId: config.appId, appSecret: config.appSecret, domain: Lark.Domain.Feishu }
 const api = new Lark.Client(base)
@@ -22,48 +24,60 @@ function isDup(id: string): boolean {
   return false
 }
 
-function textOf(msgType: string, content: string): string {
+function textOf(msgType: string, content: string, mentions?: any[]): string {
+  let out = `[${msgType}]`
   try {
     const c = JSON.parse(content)
-    if (msgType === "text") return c.text ?? ""
-    if (msgType === "post") {
+    if (msgType === "text") out = c.text ?? ""
+    else if (msgType === "post") {
       const body = c.zh_cn ?? c.en_us ?? Object.values(c)[0]
-      return (body?.content ?? []).flat().map((x: any) => x.text ?? "").join("")
+      out = (body?.content ?? []).flat().map((x: any) => x.text ?? "").join("")
     }
   } catch {}
-  return `[${msgType}]`
+  for (const m of mentions ?? []) out = out.replaceAll(m.key, m.name ? `@${m.name}` : "@某人")
+  return out
 }
 
-// 只取最近几条 + 被回复的那条,不拉整个聊天记录
-async function buildContext(chatId: string, currentId: string, parentId?: string): Promise<string> {
+/** 群聊上下文:最近 N 条且在时间窗内的所有成员发言,加被回复的那条。不拉整个聊天记录 */
+async function buildContext(chatId: string, currentId: string, parentId: string | undefined, n: number): Promise<string> {
   const lines: string[] = []
-  try {
-    const res = await api.im.message.list({
-      params: { container_id_type: "chat", container_id: chatId, sort_type: "ByCreateTimeDesc", page_size: config.contextMessages + 1 },
-    })
-    const items = (res.data?.items ?? []).filter((m) => m.message_id !== currentId).reverse()
-    for (const m of items) {
-      if (!m.body?.content || m.deleted) continue
-      const who = m.sender?.sender_type === "app" ? "机器人" : "用户"
-      lines.push(`${who}: ${textOf(m.msg_type ?? "text", m.body.content)}`)
+  if (n > 0) {
+    try {
+      const res = await api.im.message.list({
+        params: { container_id_type: "chat", container_id: chatId, sort_type: "ByCreateTimeDesc", page_size: n + 1 },
+      })
+      const since = Date.now() - config.contextWindowMinutes * 60_000
+      const labels = new Map<string, string>()
+      const items = (res.data?.items ?? [])
+        .filter((m) => m.message_id !== currentId && !m.deleted && m.body?.content && Number(m.create_time) >= since)
+        .slice(0, n)
+        .reverse()
+      for (const m of items) {
+        const sid = m.sender?.id ?? "?"
+        const who = m.sender?.sender_type === "app" ? "机器人" : labels.get(sid) ?? (labels.set(sid, `成员${labels.size + 1}`), labels.get(sid)!)
+        lines.push(`${who}: ${textOf(m.msg_type ?? "text", m.body!.content, m.mentions as any[])}`)
+      }
+    } catch (e) {
+      console.warn("拉取上下文失败(可能缺权限):", (e as Error).message)
     }
-  } catch (e) {
-    console.warn("拉取上下文失败(可能缺权限):", (e as Error).message)
   }
   if (parentId) {
     try {
       const p = await api.im.message.get({ path: { message_id: parentId } })
       const m = p.data?.items?.[0]
-      if (m?.body?.content) lines.push(`(被回复的消息) ${textOf(m.msg_type ?? "text", m.body.content)}`)
+      if (m?.body?.content) lines.push(`(被回复的消息) ${textOf(m.msg_type ?? "text", m.body.content, m.mentions as any[])}`)
     } catch {}
   }
   return lines.join("\n").slice(-config.contextMaxChars)
 }
 
-async function reply(messageId: string, markdown: string) {
+const card = (md: string) =>
+  JSON.stringify({ schema: "2.0", body: { elements: [{ tag: "markdown", content: md.slice(0, 8000) }] } })
+
+async function replyText(messageId: string, text: string) {
   await api.im.message.reply({
     path: { message_id: messageId },
-    data: { msg_type: "post", content: JSON.stringify({ zh_cn: { content: [[{ tag: "md", text: markdown }]] } }) },
+    data: { msg_type: "text", content: JSON.stringify({ text }) },
   })
 }
 
@@ -71,29 +85,42 @@ async function handle(data: any) {
   const msg = data.message
   if (!msg || isDup(msg.message_id)) return
   if (data.sender?.sender_type !== "user") return // 忽略机器人消息,避免死循环
-  const isGroup = msg.chat_type === "group"
-  const mentioned = (msg.mentions ?? []).some((m: any) => m.id?.open_id === botOpenId)
-  if (isGroup && !mentioned) return // group_msg 权限会收到所有群消息,这里只处理 @ 我的
+  const senderId: string | undefined = data.sender?.sender_id?.open_id
+  if (config.allowedOpenIds.length && !(senderId && config.allowedOpenIds.includes(senderId))) return
 
-  // 去掉 @机器人 占位符 (@_user_1)
-  let question = textOf(msg.message_type, msg.content)
-  for (const m of msg.mentions ?? []) question = question.replaceAll(m.key, "")
-  question = question.trim()
+  if (msg.chat_type !== "group") {
+    await replyText(msg.message_id, "我只在群里工作,把我拉进群并 @ 我吧。").catch(() => {})
+    return
+  }
+  // 开了 group_msg 权限后群里每条消息都会推过来,这里只处理 @ 我的
+  if (!(msg.mentions ?? []).some((m: any) => m.id?.open_id === botOpenId)) return
+
+  const question = textOf(msg.message_type, msg.content, (msg.mentions ?? []).map((m: any) => ({ ...m, name: m.id?.open_id === botOpenId ? "" : m.name })))
+    .replace(/@某人/g, "")
+    .trim()
   if (!question) return
 
-  // 先点个表情表示收到了
-  api.im.messageReaction
-    .create({ path: { message_id: msg.message_id }, data: { reaction_type: { emoji_type: "OnIt" } } })
-    .catch(() => {})
+  const cmd = runCommand(msg.chat_id, question)
+  if (cmd !== null) return void (await replyText(msg.message_id, cmd))
 
+  // 先回「思考中」卡片,答案出来后更新同一条
+  const placeholder = await api.im.message.reply({
+    path: { message_id: msg.message_id },
+    data: { msg_type: "interactive", content: card("⏳ 思考中…") },
+  })
+  const cardId = placeholder.data?.message_id
+
+  let answer: string
   try {
-    const context = await buildContext(msg.chat_id, msg.message_id, msg.parent_id)
-    const answer = await agent.ask(question, context)
-    await reply(msg.message_id, answer)
+    const s = getSettings(msg.chat_id)
+    const context = await buildContext(msg.chat_id, msg.message_id, msg.parent_id, s.context)
+    answer = await agent.ask(question, context, s)
   } catch (e) {
     console.error("处理失败:", e)
-    await reply(msg.message_id, `⚠️ 出错了:${(e as Error).message}`).catch(() => {})
+    answer = `⚠️ 出错了:${(e as Error).message}`
   }
+  if (cardId) await api.im.message.patch({ path: { message_id: cardId }, data: { content: card(answer) } })
+  else await replyText(msg.message_id, answer)
 }
 
 const dispatcher = new Lark.EventDispatcher({}).register({
@@ -107,4 +134,6 @@ const ws = new Lark.WSClient({ ...base, loggerLevel: Lark.LoggerLevel.info })
 await ws.start({ eventDispatcher: dispatcher })
 console.log("长连接已启动,等待消息…")
 
-process.on("SIGINT", () => { agent.close(); process.exit(0) })
+const stop = () => { agent.close(); process.exit(0) }
+process.on("SIGINT", stop)
+process.on("SIGTERM", stop)

@@ -5,3 +5,7 @@ __pycache__/
 node_modules/
 workspace/*
 !workspace/.gitkeep
+data/*
+!data/.gitkeep
+.idea/
+.idea/
